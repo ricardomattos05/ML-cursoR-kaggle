@@ -15,31 +15,274 @@ library(ggplot2)
 library(skimr)
 library(RCurl)
 library(kableExtra)
+library(gridExtra)
+library(glue)
 
 ```
 
 
-# Leitura dos dados
+# Leitura da base
+
+## Informações preliminares
 
 ```{r}
 adult <- read_rds("adult.rds")
 
-head(adult) 
+# head(adult) 
 
-glimpse(adult)
+# glimpse(adult)
 skim(adult)
 
 ```
 
 <br> As variáveis parecem estar com formatos corretos. Ponto de atenção para as variáveis `wokclass`, `occupation` e `native_country`, que apresentam valores missing.  </br>
 
+## Amostragem
+
+Separando os dados em treino e teste:
 
 ```{r}
+set.seed(32)
+
+adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
+
+adult_train <- training(adult_split)
+adult_test <- testing(adult_split)
+
+```
+
+
+## AED
+```{r, message=FALSE, warning=FALSE}
 
 GGally::ggpairs(adult %>% select(all_numeric(),resposta))
 GGally::ggpairs(adult %>% select(all_nominal(),resposta,-id), cardinality_threshold = 41)
 
+# adult %>% filter(is.na(occupation)|is.na(workclass) ) %>% count(occupation,workclass)
+# adult %>% filter(is.na(workclass)) %>% count(resposta)   
+# 
+# 
+# adult %>% 
+#   # filter(is.na(workclass)) %>%
+#   # mutate("workclass_na" = if_else(is.na(workclass), "1","0")) %>% #Variável com NA para analise de casos NA
+#   # select(-workclass) %>% 
+#   select_if(is.character) %>% #apenas categóricas
+#   gather(key=group, value=value, -resposta) %>% #pivot
+#   ggplot(aes(y = value, fill= resposta)) +
+#   geom_histogram(stat="count") +
+#   facet_wrap(~ group, scales = "free")
+#   
+#   
+# DataExplorer::create_report(adult)
+# 
+#  
+#   ggplot(adult, aes(sample = log(fnlwgt) )) +
+#   stat_qq() +
+#   stat_qq_line()
+#   
+#   ggplot(adult,  aes(log(fnlwgt), fill = resposta ) )+
+#     geom_density(alpha = 0.6)
+# 
+#   rm(AED_biv)    
+# devtools::source_url("https://raw.githubusercontent.com/ricardomattos05/functions/master/function_AED_bivariada.R")
+# 
+# # Response_var <- glue("resposta")
+# 
+# adult2 <- adult %>% 
+#             mutate(resposta = if_else(resposta == ">50K", 1, 0))
+# 
+# 
+# AED_biv(adult2,glue("resposta"),"Pre")
+
+
+# prop1 <-
+#           adult[!is.na(adult[2]), ] %>% # PROPENS?O POR CATEGORICAS INICIALMENTE
+#           group_by(get(names(adult[,2]))) %>%
+#           count(as.factor(get(glue(
+#             "resposta"
+#           )))) %>%            # group_by() & summarise(n = n()) are implicit
+#           mutate(prop = prop.table(n))
+#         
+#         colnames(prop1) = c(names(adult[,2]), "Response_var", "n", "prop")
+# 
+#         
+#   p1 <-
+#           ggplot(data = filter(prop1, Response_var == 1), aes(x = get(names(adult[,2])), y = prop)) +
+#           geom_bar(stat = 'identity',
+#                    position = 'dodge',
+#                    alpha = 2 / 3)  +
+#           geom_hline(
+#             yintercept = mean(select(adult, glue("resposta"))[1:nrow(select(adult, glue("resposta"))), ]),
+#             col = "red",
+#             linetype = 'dashed'
+#           ) +
+#           scale_y_continuous(labels = scales::percent) + xlab(glue(names(adult[,2]))) +
+#           theme(axis.text.x = element_text(angle = 90))
 
 ```
+
+## Data Prep
+
+Os tratamentos necessários e observados na AED, que foi feita utilizando o pacote `DataExplorer` e a função [`AED_biv`](https://github.com/ricardomattos05/functions/blob/master/function_AED_bivariada.R) que gerei para entender o comportamento das variáveis com relação a variável resposta, serão armazenados utilizando o recipes para ser utilizado tanto para treinar os modelos como para testar posteriormente.
+
+
+```{r}
+adult_recipe <- 
+  recipe(resposta ~ ., data = adult_train) %>% 
+  # step_rm(id, education) %>% 
+  step_mutate(
+    occupation = case_when(
+      is.na(occupation) ~ "Desempregado",
+      TRUE ~ as.character(occupation)),
+    workclass = case_when(
+      is.na(workclass) ~ "Desempregado",
+      TRUE ~ as.character(workclass)),
+    native_country = case_when(
+      native_country == "United-States" ~ "USA",
+      TRUE ~ "other"),
+    capital_total = capital_gain + capital_loss
+  ) %>% 
+  step_rm(id, education,capital_gain, capital_loss)%>% 
+  step_string2factor(all_nominal()) %>%
+  # step_log(fnlwgt, age) %>%  
+  step_normalize(all_numeric()) %>% 
+  step_zv(all_predictors()) %>%
+  # step_center(all_numeric()) %>%
+  # step_scale(all_numeric()) %>%
+  step_novel(all_nominal(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes())
+
+# bake(prep(adult_recipe), training(adult_split))
+
+adult_wf <- 
+  workflow() %>% 
+  add_recipe(adult_recipe)
+
+```
+
+
+## Cross-Validation
+
+Especificando a validação cruzada:
+
+```{r}
+set.seed(32)
+adult_vfold <- vfold_cv(adult_train, v = 5, strata = resposta)
+adult_vfold
+```
+
+## Modelos {.tabset}
+
+Os modelos que serão ajustados:
+
+  * Decision tree
+  * Random Forest
+  * xgboost
+
+### Decision tree
+
+Especificando modelo:
+
+```{r}
+adult_tree <- 
+  decision_tree(
+    min_n = tune(),
+    cost_complexity = tune(), 
+    tree_depth = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+adult_tree
+```
+Workflow para decision tree:
+
+```{r}
+
+workflow_adult_tree <- 
+  adult_wf %>% 
+  add_model(adult_tree)
+
+
+```
+
+Parâmentros:
+
+```{r}
+hiperparams <- parameters(
+  min_n(),
+  cost_complexity(), 
+  tree_depth()
+)
+hiperparams
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+tree_grid <- grid_max_entropy(hiperparams, size = 10)
+
+```
+
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+
+tree_tune <- 
+  workflow_adult_tree %>% 
+  tune_grid(
+    resamples = adult_vfold,
+    grid = tree_grid,
+    control = control_grid(save_pred = TRUE, verbose = T, allow_par = F),
+    metrics = metric_set(roc_auc)
+  )
+
+```
+
+```{r}
+autoplot(tree_tune)
+show_best(tree_tune, "roc_auc")
+
+tree_best_hiperparams <- select_best(tree_tune)
+tree_best_hiperparams
+
+```
+
+Finalizando WF:
+
+```{r}
+workflow_tree_final <- finalize_workflow(
+  workflow_adult_tree,
+  tree_best_hiperparams
+)
+
+workflow_tree_final
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_tree_final %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+
+```{r}
+
+tree_final <- last_fit(workflow_tree_final, adult_split)
+collect_metrics(tree_final)
+
+```
+
+
+
+
+
+
 
 
