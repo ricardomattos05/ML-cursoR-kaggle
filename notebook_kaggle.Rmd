@@ -44,7 +44,7 @@ Separando os dados em treino e teste:
 ```{r}
 set.seed(32)
 
-adult_split <- initial_split(adult, prop = 0.75, strata = resposta)
+adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
 
 adult_train <- training(adult_split)
 adult_test <- testing(adult_split)
@@ -84,15 +84,15 @@ GGally::ggpairs(adult %>% select(all_nominal(),resposta,-id), cardinality_thresh
 #     geom_density(alpha = 0.6)
 # 
 #   rm(AED_biv)    
-# devtools::source_url("https://raw.githubusercontent.com/ricardomattos05/functions/master/function_AED_bivariada.R")
+devtools::source_url("https://raw.githubusercontent.com/ricardomattos05/functions/master/function_AED_bivariada.R")
 # 
 # # Response_var <- glue("resposta")
 # 
-# adult2 <- adult %>% 
-#             mutate(resposta = if_else(resposta == ">50K", 1, 0))
+adult2 <- adult %>%
+            mutate(resposta = if_else(resposta == ">50K", 1, 0))
 # 
 # 
-# AED_biv(adult2,glue("resposta"),"Pre")
+AED_biv(adult2,glue("resposta"),"Pre")
 
 
 # prop1 <-
@@ -120,6 +120,8 @@ GGally::ggpairs(adult %>% select(all_nominal(),resposta,-id), cardinality_thresh
 #           theme(axis.text.x = element_text(angle = 90))
 
 ```
+
+# Modelagem
 
 ## Data Prep
 
@@ -209,9 +211,7 @@ Parâmentros:
 
 ```{r}
 hiperparams <- parameters(
-  min_n(),
-  cost_complexity(), 
-  tree_depth()
+ adult_tree
 )
 hiperparams
 ```
@@ -244,7 +244,7 @@ tree_tune <-
 autoplot(tree_tune)
 show_best(tree_tune, "roc_auc")
 
-tree_best_hiperparams <- select_best(tree_tune)
+tree_best_hiperparams <- select_best(tree_tune) #cp = 1.069415e-09 td =	8	 min_n = 19	 Model04
 tree_best_hiperparams
 
 ```
@@ -280,9 +280,519 @@ collect_metrics(tree_final)
 ```
 
 
+### Random Forest
+
+Especificando modelo:
+
+```{r}
+adult_rf <- 
+  rand_forest(
+    min_n = tune(),
+    mtry = tune(),
+    trees = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("randomForest")
+
+adult_rf
+```
+Workflow para random forest:
+
+```{r}
+
+workflow_adult_rf <- 
+  adult_wf %>% 
+  add_model(adult_rf)
+
+
+```
+
+Parâmentros:
+
+```{r}
+rf_hiperparams <- parameters(
+  trees(),
+  min_n(),
+  finalize(mtry(), adult_train)
+  
+)
+rf_hiperparams
+```
+Grid:
+
+```{r}
+set.seed(32)
+
+#grade regular
+# rf_grid <- grid_regular( 
+#   mtry(range = c(10, 30)),
+#   min_n(range = c(2, 8))
+#   , levels = 10)
+
+#grid_max_entropy
+rf_grid2 <- grid_max_entropy(
+      rf_hiperparams, size = 10)
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+#doParallel::registerDoParallel()
+
+# grade regular
+# seed(123)
+# rf_tune <- 
+#   workflow_adult_rf %>% 
+#   tune_grid(
+#     resamples = adult_vfold,
+#     grid = rf_grid,
+#     control = control_grid(save_pred = TRUE, verbose = T, allow_par = F),
+#     metrics = metric_set(roc_auc)
+#   )#mtry = 14	min_n = 8	  Model63
+
+
+## grade cubo latino
+# seed(123)
+# rf_tune2 <- 
+#   workflow_adult_rf %>% 
+#   tune_grid(
+#     resamples = adult_vfold,
+#     grid = 10,
+#     control = control_grid(save_pred = TRUE, verbose = T, allow_par = F),
+#     metrics = metric_set(roc_auc)
+#   )
+
+## Grade Max_Entropy
+seed(123)
+rf_tune3 <- 
+  workflow_adult_rf %>% 
+  tune_grid(
+    resamples = adult_vfold,
+    grid = rf_grid2,
+    control = control_grid(save_pred = TRUE, verbose = T, allow_par = F),
+    metrics = metric_set(roc_auc)
+  )
+#doParallel::stopImplicitCluster()
+```
+
+```{r}
+autoplot(rf_tune3)
+show_best(rf_tune3,"roc_auc")
+
+rf_best_hiperparams <- select_best(rf_tune3) 
+rf_best_hiperparams #mtry = 14	min_n = 34	  trees = 1731 (roc_auc = 0.9135926)
+
+```
+
+Finalizando WF:
+
+```{r}
+workflow_rf_final <- finalize_workflow(
+  workflow_adult_rf,
+  rf_best_hiperparams
+)
+
+workflow_rf_final
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_rf_final %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+rf_final <- last_fit(workflow_rf_final, adult_split)
+collect_metrics(rf_final)
+
+```
+
+### Xgboost
+
+Especificando modelo:
+
+```{r}
+adult_xgb <- 
+  boost_tree(
+   mtry = 5, 
+  trees = 1000, 
+  min_n = tune(), 
+  tree_depth = tune(),
+  loss_reduction = tune(), 
+  learn_rate = tune(), 
+  sample_size = 0.75
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb
+```
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb <- 
+  adult_wf %>% 
+  add_model(adult_xgb)
+
+
+```
+
+Parâmentros:
+
+```{r}
+# xgb_hiperparams <- parameters(
+#   trees(),
+#   min_n(),
+#   finalize(mtry(), adult_train)
+#   
+# )
+# rf_hiperparams
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+
+xgb_grid <- parameters(adult_xgb) %>% 
+    finalize(adult_train) %>% 
+    grid_random(size = 200)
+
+head(xgb_grid)
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+# grid search
+xgb_tune <-
+  workflow_adult_xgb %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid,
+        control = control_grid(verbose = TRUE),
+        metrics = metric_set(roc_auc)
+    )
+
+```
+
+
+```{r}
+autoplot(xgb_tune)
+show_best(xgb_tune,"roc_auc")
+
+xgb_best_hiperparams <- select_best(xgb_tune) 
+xgb_best_hiperparams #7	10	0.08023151	2.906732e-10	Model008 (roc_auc = 0.9237762)
+
+```
+
+Finalizando WF:
+
+```{r}
+workflow_xgb_final <- finalize_workflow(
+  workflow_adult_xgb,
+  xgb_best_hiperparams
+)
+
+workflow_xgb_final
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final <- last_fit(workflow_xgb_final, adult_split)
+collect_metrics(xgb_final)
+
+```
+
+
+
+Tunando mtry, trees e sample size:
+
+```{r}
+adult_xgb2 <- 
+  boost_tree(
+   mtry = 5, 
+  trees = 1000, 
+  min_n = 5, 
+  tree_depth = 8,
+  loss_reduction = 1.881944e-05, 
+  learn_rate = 0.07024783, 
+  sample_size = 0.75
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb
+```
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb2 <- 
+  adult_wf %>% 
+  add_model(adult_xgb2)
+
+
+```
+
+Grid:
+
+```{r}
+# set.seed(32)
+# 
+# xgb_grid <- parameters(adult_xgb) %>% 
+#     finalize(adult_train) %>% 
+#     grid_random(size = 200)
+# 
+# head(xgb_grid)
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+# grid search
+# xgb_tune <-
+#   workflow_adult_xgb %>%
+#     tune_grid(
+#         resamples = adult_vfold,
+#         grid = xgb_grid,
+#         control = control_grid(verbose = TRUE),
+#         metrics = metric_set(roc_auc)
+#     )
+
+```
+
+
+```{r}
+# autoplot(xgb_tune)
+# show_best(xgb_tune,"roc_auc")
+# 
+# xgb_best_hiperparams <- select_best(xgb_tune) 
+# xgb_best_hiperparams #7	10	0.08023151	2.906732e-10	Model008 (roc_auc = 0.9237762)
+
+```
+
+
+Finalizando WF:
+
+```{r}
+workflow_xgb_final2 <- finalize_workflow(
+  workflow_adult_xgb2,
+  parameters(workflow_adult_xgb2) 
+)
+
+workflow_xgb_final2
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final2 %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final2 <- last_fit(workflow_xgb_final2, adult_split)
+collect_metrics(xgb_final2)
+
+```
 
 
 
 
+Tunando mtry, trees e sample size:
 
+```{r}
+adult_xgb3 <- 
+  boost_tree(
+   mtry = tune(), 
+  trees = tune(), 
+  min_n = xgb_best_hiperparams$min_n, 
+  tree_depth = xgb_best_hiperparams$tree_depth,
+  loss_reduction = xgb_best_hiperparams$loss_reduction, 
+  learn_rate = xgb_best_hiperparams$learn_rate, 
+  sample_size = tune()
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb3
+```
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb3 <- 
+  adult_wf %>% 
+  add_model(adult_xgb3)
+
+
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+
+xgb_grid <- parameters(adult_xgb3) %>%
+    finalize(adult_train) %>%
+    grid_random(size = 20)
+
+head(xgb_grid)
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+# grid search
+xgb_tune3 <-
+  workflow_adult_xgb3 %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid,
+        control = control_grid(verbose = TRUE),
+        metrics = metric_set(roc_auc)
+    )
+
+```
+
+
+```{r}
+autoplot(xgb_tune3)
+show_best(xgb_tune3,"roc_auc")
+
+xgb3_best_hiperparams <- select_best(xgb_tune3)
+xgb3_best_hiperparams #7	10	0.08023151	2.906732e-10	Model008 (roc_auc = 0.9237762)
+
+```
+
+
+Finalizando WF:
+
+```{r}
+workflow_xgb_final3 <- finalize_workflow(
+  workflow_adult_xgb3,
+  xgb3_best_hiperparams 
+)
+
+workflow_xgb_final3
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final3 %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final3 <- last_fit(workflow_xgb_final3, adult_split)
+collect_metrics(xgb_final2)
+
+```
+
+# Comparação dos Modelos
+
+```{r}
+
+bind_rows(
+ tree_final %>%
+  collect_predictions() %>% 
+  mutate(id = "Decision tree")
+  ,
+ rf_final %>%
+  collect_predictions() %>% 
+  mutate(id = "Random Forest")
+ ,
+  xgb_final %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost")
+) %>% 
+  group_by(id) %>% 
+  nest() %>% 
+  ungroup() %>% 
+  mutate(roc = map(data, ~roc_curve(.x, truth = resposta, `.pred_>50K`)),
+         auc = map_dbl(data, ~roc_auc(.x, truth = resposta, `.pred_>50K`) %>% 
+                         pull(.estimate) %>% round(4)),
+         id = paste0(id, " auc: ", auc)) %>% 
+  select(-data) %>% 
+  unnest(cols = c(roc)) %>% 
+  ggplot() +
+  aes(x = 1 - specificity, y = sensitivity, color = id) +
+  geom_path() +
+  geom_abline(lty = 3) +
+  ggtitle("Curva Roc")
+
+
+```
+# Scoragem para submeter resultado
+
+```{r}
+
+adult_val <- readr::read_rds("adult_val.rds")
+
+xgboost_modelo_final <- adult_xgb %>% 
+    finalize_model(xgb_best_hiperparams)
+
+adult_fit <- 
+  fit(xgboost_modelo_final,
+    formula = resposta ~.,  
+    data = bake(prep(adult_recipe), new_data = adult))
+
+adult_val$more_than_50k <- 
+  predict(adult_fit, 
+          bake(prep(adult_recipe), new_data = adult_val),
+          type = "prob")$`.pred_>50K`
+```
+
+Matriz de confusão:
+
+```{r}
+adult_val %>% 
+  transmute(resposta = factor(resposta, levels = c(">50K", "<=50K")), 
+            more_than_50k = ifelse(more_than_50k > 0.5, ">50K", "<=50K") %>% 
+              factor(levels = c(">50K", "<=50K"))) %>% 
+  table() %>% 
+  caret::confusionMatrix()
+```
+
+```{r}
+submissao <- adult_val %>% select(id, more_than_50k)
+readr::write_csv(submissao, "submissao.csv")
+```
 
