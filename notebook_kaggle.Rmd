@@ -44,7 +44,7 @@ Separando os dados em treino e teste:
 ```{r}
 set.seed(32)
 
-adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
+adult_split <- initial_split(adult, prop = 0.75, strata = resposta)
 
 adult_train <- training(adult_split)
 adult_test <- testing(adult_split)
