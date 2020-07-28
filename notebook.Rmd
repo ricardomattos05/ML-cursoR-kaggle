@@ -1,0 +1,105 @@
+---
+title: "Desafio Intro ML - Curso-R"
+author: "Ricardo Mattos"
+date: "12/07/2020"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+
+```{r setup, include=FALSE}
+library(readr)
+library(tidymodels)
+library(ggplot2)
+library(skimr)
+library(RCurl)
+library(kableExtra)
+library(gridExtra)
+library(glue)
+library(forcats)
+```
+
+# Objetivo
+
+O objetivo desse notebook é efetuar todo o processo de modelagem da base de dados `adult`, disponibilizada para o desafio do curso de introdução ao Machine Learning da Curso-R, utilizando o framework `tidymodels`. Ou seja, explorar, tratar, preparar, tunnar e escolher o modelo que que melhor se ajusta aos dados disponibilizados. Vamos nessa!
+
+
+# Leitura da base
+
+## Informações preliminares
+
+```{r}
+adult <- read_rds("adult.rds")
+
+# head(adult) 
+
+# glimpse(adult)
+skim(adult)
+
+```
+
+
+
+<br> As variáveis parecem estar com formatos corretos. Ponto de atenção para as variáveis `wokclass`, `occupation` e `native_country`, que apresentam valores missing.  </br>
+
+
+## Amostragem
+
+Já vamos fazer a separação dos dados em treino e teste para a modelagem.
+
+```{r}
+set.seed(32)
+
+adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
+
+adult_train <- training(adult_split)
+adult_test <- testing(adult_split)
+
+```
+
+
+# AED 
+
+<br> Agora vamos analisar o comportamento das variáveis para definirmos como tratar os nossos dados para o modelo. </br>
+
+### Análise bivariada {.tabset}
+```{r,results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+
+
+# DataExplorer::create_report(adult)
+
+devtools::source_url("https://raw.githubusercontent.com/ricardomattos05/functions/master/function_AED_bivariada.R")
+# 
+# 
+adult2 <- adult %>%
+            select(-id) %>% 
+            mutate(resposta = if_else(resposta == ">50K", 1, 0))
+# 
+# 
+
+# names(adult2)
+for (i in 1:(length(adult2)-1) ) {
+  
+  df <- adult2[,c(i,15)]
+  cat("#### ",names(df[,1]),"\n") 
+  print(AED_biv(df,glue("resposta"),"Pre"))
+  cat('\n\n')
+}
+
+
+
+```
+
+
+
+
+
+
+
+
