@@ -17,7 +17,7 @@ library(RCurl)
 library(kableExtra)
 library(gridExtra)
 library(glue)
-
+library(forcats)
 ```
 
 
@@ -95,29 +95,6 @@ adult2 <- adult %>%
 AED_biv(adult2,glue("resposta"),"Pre")
 
 
-# prop1 <-
-#           adult[!is.na(adult[2]), ] %>% # PROPENS?O POR CATEGORICAS INICIALMENTE
-#           group_by(get(names(adult[,2]))) %>%
-#           count(as.factor(get(glue(
-#             "resposta"
-#           )))) %>%            # group_by() & summarise(n = n()) are implicit
-#           mutate(prop = prop.table(n))
-#         
-#         colnames(prop1) = c(names(adult[,2]), "Response_var", "n", "prop")
-# 
-#         
-#   p1 <-
-#           ggplot(data = filter(prop1, Response_var == 1), aes(x = get(names(adult[,2])), y = prop)) +
-#           geom_bar(stat = 'identity',
-#                    position = 'dodge',
-#                    alpha = 2 / 3)  +
-#           geom_hline(
-#             yintercept = mean(select(adult, glue("resposta"))[1:nrow(select(adult, glue("resposta"))), ]),
-#             col = "red",
-#             linetype = 'dashed'
-#           ) +
-#           scale_y_continuous(labels = scales::percent) + xlab(glue(names(adult[,2]))) +
-#           theme(axis.text.x = element_text(angle = 90))
 
 ```
 
@@ -129,9 +106,9 @@ Os tratamentos necessários e observados na AED, que foi feita utilizando o paco
 
 
 ```{r}
+
 adult_recipe <- 
   recipe(resposta ~ ., data = adult_train) %>% 
-  # step_rm(id, education) %>% 
   step_mutate(
     occupation = case_when(
       is.na(occupation) ~ "Desempregado",
@@ -142,9 +119,20 @@ adult_recipe <-
     native_country = case_when(
       native_country == "United-States" ~ "USA",
       TRUE ~ "other"),
-    capital_total = capital_gain + capital_loss
+    capital_total = capital_gain - capital_loss
+    , #or +
+    marital_status = case_when(
+      marital_status == "Married-AF-spouse" | marital_status == "Married-civ-spouse" ~ "Married",
+      TRUE ~ as.character(marital_status))
+    ,
+    education = fct_collapse(
+      education,
+      "HS-not-grad" = c("Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", "12th"),
+      Associates = c("Assoc-acdm", "Assoc-voc")
+    ),
+    education = fct_relevel(education, "HS-not-grad", "HS-grad", "Some-college", "Associates", "Bachelors", "Masters", "Prof-school", "Doctorate")
   ) %>% 
-  step_rm(id, education,capital_gain, capital_loss)%>% 
+  step_rm(id, capital_gain, capital_loss)%>% 
   step_string2factor(all_nominal()) %>%
   # step_log(fnlwgt, age) %>%  
   step_normalize(all_numeric()) %>% 
@@ -154,11 +142,14 @@ adult_recipe <-
   step_novel(all_nominal(), -all_outcomes()) %>% 
   step_dummy(all_nominal(), -all_outcomes())
 
-# bake(prep(adult_recipe), training(adult_split))
+# bake(prep(adult_recipe), adult_train)
 
 adult_wf <- 
   workflow() %>% 
   add_recipe(adult_recipe)
+
+
+
 
 ```
 
@@ -414,7 +405,7 @@ collect_metrics(rf_final)
 
 ```
 
-### Xgboost
+### Xgboost1
 
 Especificando modelo:
 
@@ -467,6 +458,10 @@ xgb_grid <- parameters(adult_xgb) %>%
     grid_random(size = 200)
 
 head(xgb_grid)
+
+parameters(adult_xgb3) %>% 
+
+  finalize(mtry(), bake(prep(adult_recipe), adult_train))
 
 
 ```
@@ -523,9 +518,14 @@ Modelo final:
 xgb_final <- last_fit(workflow_xgb_final, adult_split)
 collect_metrics(xgb_final)
 
+# Original, pré mutates
+# accuracy	binary	0.8700660		
+# roc_auc	binary	0.9228654	
+
 ```
 
 
+### Xgboost2
 
 Tunando mtry, trees e sample size:
 
@@ -543,7 +543,7 @@ adult_xgb2 <-
   set_mode("classification") %>%
   set_engine("xgboost")
 
-adult_xgb
+adult_xgb2
 ```
 Workflow para Xgboost:
 
@@ -626,7 +626,7 @@ collect_metrics(xgb_final2)
 ```
 
 
-
+### Xgboost3
 
 Tunando mtry, trees e sample size:
 
@@ -692,7 +692,7 @@ autoplot(xgb_tune3)
 show_best(xgb_tune3,"roc_auc")
 
 xgb3_best_hiperparams <- select_best(xgb_tune3)
-xgb3_best_hiperparams #7	10	0.08023151	2.906732e-10	Model008 (roc_auc = 0.9237762)
+xgb3_best_hiperparams #11	419	0.7933403	Model12 (roc_auc = 0.9244971)
 
 ```
 
@@ -722,14 +722,355 @@ Modelo final:
 ```{r}
 
 xgb_final3 <- last_fit(workflow_xgb_final3, adult_split)
-collect_metrics(xgb_final2)
+collect_metrics(xgb_final3)
 
 ```
 
-# Comparação dos Modelos
+### Xgboost4: Grid latin hypercube 
+
+Tunando mtry, trees e sample size:
+
+```{r}
+adult_xgb4 <- 
+  boost_tree(
+   mtry = tune(), 
+  trees = 1000, 
+  min_n = tune(), 
+  tree_depth = tune(),
+  loss_reduction = tune(), 
+  learn_rate = tune(), 
+  sample_size = tune()
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb4
+```
+Workflow para Xgboost:
 
 ```{r}
 
+workflow_adult_xgb4 <- 
+  adult_wf %>% 
+  add_model(adult_xgb4)
+
+
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+
+xgb_grid <- grid_latin_hypercube(
+  tree_depth(),
+  min_n(),
+  loss_reduction(),
+  sample_size = sample_prop(),
+  finalize(mtry(), adult_train),
+  learn_rate(),
+  size = 30
+)
+
+head(xgb_grid)
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+# grid search
+xgb_tune4 <-
+  workflow_adult_xgb4 %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid,
+        control = control_grid(verbose = TRUE),
+        metrics = metric_set(roc_auc)
+    )
+
+```
+
+
+```{r}
+autoplot(xgb_tune4)
+show_best(xgb_tune4,"roc_auc")
+
+xgb4_best_hiperparams <- select_best(xgb_tune4)
+xgb4_best_hiperparams #15	8	11	0.03820848	0.06904151	0.7616527	Model07 (roc_auc = 0.9227588)
+
+
+```
+
+
+Finalizando WF:
+
+```{r}
+workflow_xgb_final4 <- finalize_workflow(
+  workflow_adult_xgb4,
+  xgb4_best_hiperparams 
+)
+
+workflow_xgb_final4
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final4 %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final4 <- last_fit(workflow_xgb_final4, adult_split)
+collect_metrics(xgb_final4)
+
+```
+### Xgboost5
+
+Tunando mtry, trees e sample size:
+
+```{r}
+adult_xgb5 <- 
+  boost_tree(
+   mtry = tune(), 
+  trees = tune(), 
+  min_n = tune(), 
+  tree_depth = tune(),
+  # loss_reduction = tune(), 
+  learn_rate = tune(), 
+  # sample_size = tune()
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb5
+```
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb5 <- 
+  adult_wf %>% 
+  add_model(adult_xgb5)
+
+
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+
+xgb_grid <- parameters(adult_xgb5) %>%
+    finalize(bake(prep(adult_recipe),adult_train)) %>%
+    grid_max_entropy(size = 20)
+
+xgb_grid
+
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+library(doParallel)
+
+# numCores <- parallel::detectCores() #Num de cores para dividir o trab
+# 
+# doParallel::registerDoParallel(numCores) #Registrando cores e iniciando parallel computing framework
+# 
+# foreach::getDoParWorkers() #confirmando o numero de cores utilizados
+
+cl <- makePSOCKcluster(parallel::detectCores(logical = FALSE))
+registerDoParallel(cl)
+
+getDoParWorkers()
+
+clusterEvalQ(cl, {library(tidymodels)})
+
+library("doFuture")
+all_cores <- parallel::detectCores(logical = FALSE) - 1
+
+registerDoFuture()
+cl <- makeCluster(all_cores)
+plan(future::cluster, workers = cl)
+# grid search
+ini <- Sys.time()
+xgb_tune5 <-
+  workflow_adult_xgb5 %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid,
+        control = control_grid(verbose = TRUE),
+        metrics = metric_set(roc_auc)
+    )
+Sys.time()- ini #Time difference of 1.034167 hours ( 35 mins with parallel)
+
+foreach::registerDoSEQ()
+```
+
+
+```{r}
+autoplot(xgb_tune5)
+show_best(xgb_tune5,"roc_auc")
+
+xgb5_best_hiperparams <- select_best(xgb_tune5)
+xgb5_best_hiperparams #10	1636	6	10	0.006471534	0.001861842	0.9861206	Model04 (roc_auc = 0.9261595)
+
+```
+
+
+Finalizando WF:
+
+```{r}
+workflow_xgb_final5 <- finalize_workflow(
+  workflow_adult_xgb5,
+  xgb5_best_hiperparams 
+)
+
+workflow_xgb_final5
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final5 %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final5 <- last_fit(workflow_xgb_final5, adult_split)
+collect_metrics(xgb_final5)
+
+```
+
+### Xgboost6
+
+Tunando mtry, trees e sample size:
+
+```{r}
+adult_xgb6 <- 
+  boost_tree(
+    tree_depth = 7, 
+    trees = 1347,
+    learn_rate = 1.566693e-02,
+    mtry = 33,
+    min_n = 5
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb6 %>% summary()
+
+```
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb6 <- 
+  adult_wf %>% 
+  add_model(adult_xgb6)
+
+
+```
+
+Grid:
+
+```{r}
+# set.seed(32)
+# 
+# xgb_grid <- parameters(adult_xgb5) %>%
+#     finalize(bake(prep(adult_recipe),adult_train)) %>%
+#     grid_max_entropy(size = 20)
+# 
+# xgb_grid
+
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+
+# numCores <- parallel::detectCores() #Num de cores para dividir o trab
+# 
+# doParallel::registerDoParallel(numCores) #Registrando cores e iniciando parallel computing framework
+# 
+# foreach::getDoParWorkers() #confirmando o numero de cores utilizados
+# 
+# # grid search
+# ini <- Sys.time()
+# xgb_tune5 <-
+#   workflow_adult_xgb5 %>%
+#     tune_grid(
+#         resamples = adult_vfold,
+#         grid = xgb_grid,
+#         control = control_grid(verbose = TRUE),
+#         metrics = metric_set(roc_auc)
+#     )
+# Sys.time()- ini #Time difference of 1.034167 hours
+# 
+# foreach::registerDoSEQ()
+```
+
+
+```{r}
+# autoplot(xgb_tune5)
+# show_best(xgb_tune5,"roc_auc")
+# 
+# xgb5_best_hiperparams <- select_best(xgb_tune5)
+# xgb5_best_hiperparams #10	1636	6	10	0.006471534	0.001861842	0.9861206	Model04 (roc_auc = 0.9261595)
+
+```
+
+
+Finalizando WF:
+
+```{r}
+workflow_xgb_final6 <- finalize_workflow(
+  workflow_adult_xgb6,
+  parameters(adult_xgb6) 
+)
+workflow_xgb_final6
+
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final6 %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final6 <- last_fit(workflow_xgb_final6, adult_split)
+collect_metrics(xgb_final6)
+
+# Comparação dos Modelos
+
+```
+
+
+```{r}
 bind_rows(
  tree_final %>%
   collect_predictions() %>% 
@@ -742,6 +1083,26 @@ bind_rows(
   xgb_final %>%
   collect_predictions() %>% 
   mutate(id = "xgboost")
+  ,
+  xgb_final2 %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost2")
+  ,
+  xgb_final3 %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost3")
+  ,
+  xgb_final4 %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost4")
+  ,
+  xgb_final5 %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost5")
+  ,
+  xgb_final6 %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost6")
 ) %>% 
   group_by(id) %>% 
   nest() %>% 
@@ -766,8 +1127,8 @@ bind_rows(
 
 adult_val <- readr::read_rds("adult_val.rds")
 
-xgboost_modelo_final <- adult_xgb %>% 
-    finalize_model(xgb_best_hiperparams)
+xgboost_modelo_final <- adult_xgb5 %>% 
+    finalize_model(xgb5_best_hiperparams)
 
 adult_fit <- 
   fit(xgboost_modelo_final,
@@ -789,10 +1150,22 @@ adult_val %>%
               factor(levels = c(">50K", "<=50K"))) %>% 
   table() %>% 
   caret::confusionMatrix()
-```
 
+library('pROC')
+plot(roc(adult_val$resposta, adult_val$more_than_50k))
+
+
+adult_val %>% 
+  roc_auc(truth = as.factor(resposta), more_than_50k)
+
+#xgb with new step_mutate: 0.925582	
+#xgb2 with new step_mutate: 0.9262863	
+#xgb5: 0.9247659 
+#xgb5_2 tunnando apenas 5 params: 0.9277751	
+#xgb6:  0.9288229	
+```
 ```{r}
 submissao <- adult_val %>% select(id, more_than_50k)
-readr::write_csv(submissao, "submissao.csv")
+readr::write_csv(submissao, "submissao_xgb5_2.csv")
 ```
 
