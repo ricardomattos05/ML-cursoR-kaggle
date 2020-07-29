@@ -5,7 +5,8 @@ date: "12/07/2020"
 output:
   html_document:
     toc: yes
-    df_print: paged
+    toc_float: yes
+    number_sections: yes
   html_notebook:
     toc: yes
     toc_float: yes
