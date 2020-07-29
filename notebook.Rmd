@@ -3,10 +3,11 @@ title: "Desafio Intro ML - Curso-R"
 author: "Ricardo Mattos"
 date: "12/07/2020"
 output:
-  html_document:
-    toc: yes
-    df_print: paged
   html_notebook:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+  html_document:
     toc: yes
     toc_float: yes
     number_sections: yes
@@ -53,7 +54,7 @@ skim(adult)
 
 Já vamos fazer a separação dos dados em treino e teste para a modelagem.
 
-```{r}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 set.seed(32)
 
 adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
@@ -69,7 +70,7 @@ adult_test <- testing(adult_split)
 <br> Agora vamos analisar o comportamento das variáveis para definirmos como tratar os nossos dados para o modelo. </br>
 
 ### Análise bivariada {.tabset}
-```{r,results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+```{r,results='asis', echo=TRUE, message=FALSE, warning=FALSE}
 
 
 # DataExplorer::create_report(adult)
@@ -95,11 +96,10 @@ for (i in 1:(length(adult2)-1) ) {
 
 
 ```
+Alguns pontos interessantes:
 
+* `education` : é possível visualizar que quanto maior o grau de escolaridade, maior a proporção de pessoas com salarios acima de 50k. E que as categorias abaixo de HS-grad, `1th-4th` até `12th`além de serem pouco representativas, possuem baixa proporção, vamos então criar uma categoria uma nova consolidando elas `HS-not-grad`.
 
+* `marital_status` : aqui iremos agrupar os campos `Married-AF-spouse` e `Married-civ-spouse`, criando a categoria `Married`, baseado na similaridade entre elas com relação a variável resposta e considerando a descrição delas.
 
-
-
-
-
-
+* `native_country` : É um campo com pouca variabilidade, onde `r adult %>% select(native_country) %>% filter(native_country == "United-States") %>% count() / count(adult)` são pessoas dos Estados unidos. Sendo assim, poderia considerar apenas Estados unidos e agrupar o restante como outros, mas vamos manter o máximo de informação, agrupando todos os países que obtiveram proporção maior que a média de 
