@@ -145,7 +145,7 @@ adult_recipe <-
   step_novel(all_nominal(), -all_outcomes()) %>% 
   step_dummy(all_nominal(), -all_outcomes())
 
- bake(prep(adult_recipe), adult_train)
+# bake(prep(adult_recipe), adult_train)
 
 adult_wf <- 
   workflow() %>% 
