@@ -3,6 +3,13 @@ title: "Desafio Intro ML - Curso-R"
 author: "Ricardo Mattos"
 date: "12/07/2020"
 output:
+<<<<<<< HEAD
+=======
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+>>>>>>> 878aeceb81635653cac21cf9435ed0aabeec97bb
   html_notebook:
     toc: yes
     toc_float: yes
