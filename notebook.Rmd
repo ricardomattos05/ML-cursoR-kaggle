@@ -51,21 +51,6 @@ skim(adult)
 <br> As variáveis parecem estar com formatos corretos. Ponto de atenção para as variáveis `wokclass`, `occupation` e `native_country`, que apresentam valores missing.  </br>
 
 
-## Amostragem
-
-Já vamos fazer a separação dos dados em treino e teste para a modelagem.
-
-```{r, echo=TRUE, message=FALSE, warning=FALSE}
-set.seed(32)
-
-adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
-
-adult_train <- training(adult_split)
-adult_test <- testing(adult_split)
-
-```
-
-
 # AED 
 
 <br> Agora vamos analisar o comportamento das variáveis para definirmos como tratar os nossos dados para o modelo. </br>
@@ -260,4 +245,79 @@ ggplot(adult2, aes(x = class_country, fill = as.factor(resposta) )) +
 ```
 
 <br>A distribuição ficou com 5% para países acima da média e 5% para países abaixo da média.</br>
+
+# Modelagem
+
+Com nossa a análise exploratória concluída, vamos dar início as estapas da modelagem utilizando o framework do `tidymodels`.
+
+## Amostragem
+
+Fazendo a separação dos dados em treino e teste para a modelagem.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+set.seed(32)
+
+adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
+
+adult_train <- training(adult_split)
+adult_test <- testing(adult_split)
+
+```
+
+
+## Data Prep
+
+Os tratamentos necessários observados na AED, que foi feita utilizando o pacote `DataExplorer` e a função [`AED_biv`](https://github.com/ricardomattos05/functions/blob/master/function_AED_bivariada.R) que gerei para entender o comportamento das variáveis com relação a variável resposta, serão armazenados utilizando o recipes para ser utilizado tanto para treinar os modelos como para testar posteriormente.
+
+
+```{r}
+
+adult_recipe <- 
+  recipe(resposta ~ ., data = adult_train) %>% 
+  step_mutate(
+    occupation = case_when(
+      is.na(occupation) ~ "Desempregado",
+      TRUE ~ as.character(occupation)),
+    workclass = case_when(
+      is.na(workclass) ~ "Desempregado",
+      TRUE ~ as.character(workclass)),
+    native_country = case_when(
+      native_country == "United-States" ~ "USA",
+      TRUE ~ "other"),
+    capital_total = capital_gain - capital_loss
+    , #or +
+    marital_status = case_when(
+      marital_status == "Married-AF-spouse" | marital_status == "Married-civ-spouse" ~ "Married",
+      TRUE ~ as.character(marital_status))
+    ,
+    education = case_when(education = c("Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", "12th") ~"HS-not-grad",
+                          TRUE ~ as.character(education))
+                          
+    # education = fct_collapse(
+    #   education,
+    #   "HS-not-grad" = c("Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", "12th"),
+    #   Associates = c("Assoc-acdm", "Assoc-voc")
+    # ),
+    # education = fct_relevel(education, "HS-not-grad", "HS-grad", "Some-college", "Associates", "Bachelors", "Masters", "Prof-school", "Doctorate")
+  ) %>% 
+  step_rm(id, capital_gain, capital_loss)%>% 
+  step_string2factor(all_nominal()) %>%
+  # step_log(fnlwgt, age) %>%  
+  step_normalize(all_numeric()) %>% 
+  step_zv(all_predictors()) %>%
+  # step_center(all_numeric()) %>%
+  # step_scale(all_numeric()) %>%
+  step_novel(all_nominal(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes())
+
+# bake(prep(adult_recipe), adult_train)
+
+adult_wf <- 
+  workflow() %>% 
+  add_recipe(adult_recipe)
+
+
+
+
+```
 
