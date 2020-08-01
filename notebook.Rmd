@@ -157,14 +157,13 @@ Vamos então balancear o gênero agrupando as categorias Wife e Husband, criando
 ### Capital Gain and Loss
 
 
-
 ```{r, echo = TRUE}
+
 ggplot(adult, aes(x= capital_gain, y= capital_loss)) +
   geom_point()
 ```
 
 
-<br>Constatando se nenhuma observação possui valor para capital_gain e capital_loss simultaneamente:</br>
 
 ```{r}
 sum(adult$capital_loss > 0 & adult$capital_gain > 0)
@@ -191,8 +190,6 @@ Pelo visto a catgoria NA possui relação com a variável resposta distinta de t
 
 
 ### native_country
-
-gerar tabela com prop por país e gerar coluna com classificação acima/abaixo média
 
 ```{r}
 
@@ -263,5 +260,4 @@ ggplot(adult2, aes(x = class_country, fill = as.factor(resposta) )) +
 ```
 
 <br>Ficamos então com 5% dos dados para países acima da média e 5% para países abaixo da média.</br>
-
 
