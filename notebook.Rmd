@@ -383,3 +383,76 @@ tree_grid <- grid_max_entropy(hiperparams, size = 10)
 
 ```
 
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r, echo= TRUE}
+
+tree_tune <- 
+  workflow_adult_tree %>% 
+  tune_grid(
+    resamples = adult_vfold,
+    grid = tree_grid,
+    control = control_grid(save_pred = TRUE, verbose = T, allow_par = F),
+    metrics = metric_set(roc_auc)
+  )
+
+```
+
+```{r}
+autoplot(tree_tune)
+show_best(tree_tune, "roc_auc")
+
+tree_best_hiperparams <- select_best(tree_tune) #1.175764e-05	8	13	Model07 (roc_auc = 0.9008466)
+tree_best_hiperparams
+
+```
+
+Finalizando WF:
+
+```{r}
+workflow_tree_final <- finalize_workflow(
+  workflow_adult_tree,
+  tree_best_hiperparams
+)
+
+workflow_tree_final
+```
+
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_tree_final %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+
+Modelo final:
+
+```{r}
+
+tree_final <- last_fit(workflow_tree_final, adult_split)
+collect_metrics(tree_final) # roc_auc = 0.8947624
+
+```
+
+
+
+### Random Forest
+
+Especificando modelo:
+
+```{r}
+adult_rf <- 
+  rand_forest(
+    min_n = tune(),
+    mtry = tune(),
+    trees = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("randomForest")
+
+adult_rf
+```
