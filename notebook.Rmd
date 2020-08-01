@@ -3,13 +3,6 @@ title: "Desafio Intro ML - Curso-R"
 author: "Ricardo Mattos"
 date: "12/07/2020"
 output:
-<<<<<<< HEAD
-=======
-  html_document:
-    toc: yes
-    toc_float: yes
-    number_sections: yes
->>>>>>> 878aeceb81635653cac21cf9435ed0aabeec97bb
   html_notebook:
     toc: yes
     toc_float: yes
@@ -31,11 +24,12 @@ library(kableExtra)
 library(gridExtra)
 library(glue)
 library(forcats)
+library(DataExplorer)
 ```
 
 # Objetivo
 
-O objetivo desse notebook é efetuar todo o processo de modelagem da base de dados `adult`, disponibilizada para o desafio do curso de introdução ao Machine Learning da Curso-R, utilizando o framework `tidymodels`. Ou seja, explorar, tratar, preparar, tunnar e escolher o modelo que que melhor se ajusta aos dados disponibilizados. Vamos nessa!
+O objetivo desse notebook é efetuar todo o processo de modelagem da base de dados `adult`, disponibilizada para o desafio do curso de introdução ao Machine Learning da Curso-R, utilizando o framework `tidymodels`. Ou seja, explorar, tratar, preparar, tunnar e escolher o modelo que melhor se ajusta aos dados disponibilizados. Vamos nessa!
 
 
 # Leitura da base
@@ -76,7 +70,8 @@ adult_test <- testing(adult_split)
 
 <br> Agora vamos analisar o comportamento das variáveis para definirmos como tratar os nossos dados para o modelo. </br>
 
-### Análise bivariada {.tabset}
+## Análise bivariada {.tabset}
+
 ```{r,results='asis', echo=TRUE, message=FALSE, warning=FALSE}
 
 
@@ -95,7 +90,7 @@ adult2 <- adult %>%
 for (i in 1:(length(adult2)-1) ) {
   
   df <- adult2[,c(i,15)]
-  cat("#### ",names(df[,1]),"\n") 
+  cat("### ",names(df[,1]),"\n") 
   print(AED_biv(df,glue("resposta"),"Pre"))
   cat('\n\n')
 }
@@ -103,10 +98,96 @@ for (i in 1:(length(adult2)-1) ) {
 
 
 ```
-Alguns pontos interessantes:
+
+
+## {-}
+
+Observações:
 
 * `education` : é possível visualizar que quanto maior o grau de escolaridade, maior a proporção de pessoas com salarios acima de 50k. E que as categorias abaixo de HS-grad, `1th-4th` até `12th`além de serem pouco representativas, possuem baixa proporção, vamos então criar uma categoria uma nova consolidando elas `HS-not-grad`.
 
 * `marital_status` : aqui iremos agrupar os campos `Married-AF-spouse` e `Married-civ-spouse`, criando a categoria `Married`, baseado na similaridade entre elas com relação a variável resposta e considerando a descrição delas.
 
-* `native_country` : É um campo com pouca variabilidade, onde `r adult %>% select(native_country) %>% filter(native_country == "United-States") %>% count() / count(adult)` são pessoas dos Estados unidos. Sendo assim, poderia considerar apenas Estados unidos e agrupar o restante como outros, mas vamos manter o máximo de informação, agrupando todos os países que obtiveram proporção maior que a média de 
+* `native_country` : É um campo com pouca variabilidade, onde `r (adult %>% select(native_country) %>% filter(native_country == "United-States") %>% count() / count(adult)) %>% as.numeric() %>% percent()` dos dados estão atribuídos como "Estados Unidos". Sendo assim, poderia considerar apenas Estados Unidos e agrupar o restante como outros, mas vamos manter o máximo de informação e reduzir as categorias para 3, agrupando todos os países que obtiveram proporção maior que a média, manter o valor mais representativo e uma categoria com os países abaixo da média.
+
+* `relationship` : campo contém os campos `husband` e `wife`, aparentemente poderiamos agrupa-los, vamos analisar mais afundo.
+
+* `capital_loss` e `capital_gain` : Aparentemente tanto quem ganha quanto quem perde algum valor apresentam maiores probabilidades de ter salario >50k. Vamos então avaliar a correlação entre elas.
+
+* `workclass` : Categorias com baixa representatividade como `Never-worked`e `Without-pay` não possuem classificação com a resposta de interesse ">50k", vamos dar um zoom nessa variável e analisar os NA's que identificamos também.
+
+## AED final: {.tabset}
+
+### occupation
+
+```{r}
+
+ggplot(adult, aes(x = occupation, fill = resposta)) + 
+  geom_bar(position="fill") + 
+  theme(axis.text.x = element_text(angle = 90)) + 
+  ggtitle("occupation")
+
+```
+
+<br> É possível ver que não faria sentido atribuir os NAs de forma modal, uma vez que nosso objetivo é obter o maior poder preditivo possível, logo, não queremos perder informação. Sendo assim, não vamos diluir os NAs na categoria com maior representatividade `Prof-scpeciality`, vamos atribuir à uma categoria com proporções similares e que possui uma boa representatividade, `Farming-fishing`. </br>
+
+
+### relationship
+```{r}
+
+ggplot(adult, aes(x = relationship)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  ggtitle("relationship")
+
+ggplot(adult, aes(x = relationship, fill = resposta)) + 
+  geom_bar(position="fill") + 
+  theme(axis.text.x = element_text(angle = 90)) + 
+  ggtitle("relationship")
+
+ggplot(adult, aes(x = relationship, fill = sex)) + 
+  geom_bar(position="fill") + 
+  theme(axis.text.x = element_text(angle = 90)) + 
+  ggtitle("relationship")
+
+```
+
+Vamos então balancear o gênero agrupando as categorias Wife e Husband, criando a categoria `Married`.
+
+### Capital Gain and Loss
+
+```{r}
+ggplot(adult, aes(x= capital_gain, y= capital_loss)) +
+  geom_point()
+```
+
+<br>Constatando se nenhuma observação possui valor para capital_gain e capital_loss simultaneamente:</br>
+
+```{r}
+sum(adult$capital_loss > 0 & adult$capital_gain > 0)
+```
+Sendo assim, podemos soma-las e criar a variável `capital_total` sem medo de perder informação.
+
+### Worclass
+
+```{r}
+
+ggplot(adult, aes(x = workclass)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  ggtitle("Workclass")
+
+ggplot(adult, aes(x = workclass, fill = resposta)) + 
+  geom_bar(position="fill") + 
+  theme(axis.text.x = element_text(angle = 90)) + 
+  ggtitle("Workclass")
+
+```
+
+Pelo visto a catgoria NA possui relação com a variável resposta distinta de todas as outras categorias, vamos então gerar uma nova categoria `not-identify` para atribuir os valores NA.
+
+
+### native_country
+
+gerar tabela com prop por país e gerar coluna com classificação acima/abaixo média
+
