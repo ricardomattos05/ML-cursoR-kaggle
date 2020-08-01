@@ -51,21 +51,6 @@ skim(adult)
 <br> As variáveis parecem estar com formatos corretos. Ponto de atenção para as variáveis `wokclass`, `occupation` e `native_country`, que apresentam valores missing.  </br>
 
 
-## Amostragem
-
-Já vamos fazer a separação dos dados em treino e teste para a modelagem.
-
-```{r, echo=TRUE, message=FALSE, warning=FALSE}
-set.seed(32)
-
-adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
-
-adult_train <- training(adult_split)
-adult_test <- testing(adult_split)
-
-```
-
-
 # AED 
 
 <br> Agora vamos analisar o comportamento das variáveis para definirmos como tratar os nossos dados para o modelo. </br>
@@ -129,7 +114,7 @@ ggplot(adult, aes(x = occupation, fill = resposta)) +
 
 ```
 
-<br> É possível ver que não faria sentido atribuir os NAs de forma modal, uma vez que nosso objetivo é obter o maior poder preditivo possível, logo, não queremos perder informação. Sendo assim, não vamos diluir os NAs na categoria com maior representatividade `Prof-scpeciality`, vamos atribuir à uma categoria com proporções similares e que possui uma boa representatividade, `Farming-fishing`. </br>
+<br> É possível ver que não faria sentido atribuir os NAs de forma modal, uma vez que nosso objetivo é obter o maior poder preditivo possível, logo, não queremos perder informação. Sendo assim, não vamos diluir os NAs na categoria com maior representatividade `Prof-specialty`, vamos atribuir à uma categoria com proporções similares e que possui uma boa representatividade, `Farming-fishing`. </br>
 
 
 ### relationship
@@ -260,4 +245,147 @@ ggplot(adult2, aes(x = class_country, fill = as.factor(resposta) )) +
 ```
 
 <br>A distribuição ficou com 5% para países acima da média e 5% para países abaixo da média.</br>
+
+# Modelagem
+
+Com nossa a análise exploratória concluída, vamos dar início as estapas da modelagem utilizando o framework do `tidymodels`.
+
+## Amostragem
+
+Fazendo a separação dos dados em treino e teste para a modelagem.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+set.seed(32)
+
+adult_split <- initial_split(adult, prop = 0.8, strata = resposta)
+
+adult_train <- training(adult_split)
+adult_test <- testing(adult_split)
+
+```
+
+
+## Data Prep
+
+Os tratamentos necessários observados na AED, que foi feita utilizando o pacote `DataExplorer` e a função [`AED_biv`](https://github.com/ricardomattos05/functions/blob/master/function_AED_bivariada.R) que gerei para entender o comportamento das variáveis com relação a variável resposta, serão armazenados utilizando o recipes para ser utilizado tanto para treinar os modelos como para testar posteriormente.
+
+
+```{r}
+
+adult_recipe <- 
+  recipe(resposta ~ ., data = adult_train) %>% 
+  step_mutate(
+    
+    occupation = case_when(
+      is.na(occupation) ~ "Farming-fishing",
+      TRUE ~ as.character(occupation)),
+    
+    workclass = case_when(
+      is.na(workclass) ~ "Not-identify",
+      TRUE ~ as.character(workclass)),
+    
+    class_country = case_when(native_country %in% c("Cambodia", "Canada", "China", "Cuba", "England", "France", "Germany", "Greece", "Hong", "India", "Iran", "Italy", "Japan", "Philippines", "Scotland", "Taiwan", "Yugoslavia", NA) ~ "greater_mean",
+                             native_country == "United-States" ~ "United-States",
+                             TRUE ~ "smaller_mean")
+    ,
+    
+    capital_total = capital_gain + capital_loss
+    , 
+    
+    marital_status = case_when(
+      marital_status %in% c("Married-AF-spouse" , "Married-civ-spouse") ~ "Married",
+      TRUE ~ as.character(marital_status))
+    ,
+    
+    education = case_when(education %in% c("1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", "12th") ~ "HS-not-grad",
+                          TRUE ~ as.character(education))
+    ,
+    
+    relationship = case_when(  relationship %in% c("Husband","Wife") ~ "Married",
+                               TRUE ~ as.character(relationship))
+    
+  ) %>% 
+  step_rm(id, capital_gain, capital_loss, native_country)%>% 
+  step_string2factor(all_nominal()) %>%
+  step_normalize(all_numeric()) %>% 
+  step_zv(all_predictors()) %>%
+  step_novel(all_nominal(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes())
+
+ # bake(prep(adult_recipe), adult_train)
+
+
+adult_wf <- 
+  workflow() %>% 
+  add_recipe(adult_recipe)
+
+```
+
+
+
+## Cross-Validation
+
+Especificando a validação cruzada:
+
+```{r}
+set.seed(32)
+adult_vfold <- vfold_cv(adult_train, v = 5, strata = resposta)
+adult_vfold
+```
+
+## Modelos {.tabset}
+
+Os modelos que serão ajustados:
+
+  * Decision tree
+  * Random Forest
+  * Xgboost
+  
+### Decision tree
+
+Especificando modelo:
+
+```{r}
+adult_tree <- 
+  decision_tree(
+    min_n = tune(),
+    cost_complexity = tune(), 
+    tree_depth = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+adult_tree
+```
+Workflow para decision tree:
+
+```{r}
+
+workflow_adult_tree <- 
+  adult_wf %>% 
+  add_model(adult_tree)
+
+
+```
+
+Parâmentros:
+
+```{r}
+hiperparams <- parameters(
+ adult_tree
+)
+hiperparams
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+tree_grid <- grid_max_entropy(hiperparams, size = 10)
+
+```
+
+
+
+
+
 
