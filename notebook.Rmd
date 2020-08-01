@@ -259,5 +259,5 @@ ggplot(adult2, aes(x = class_country, fill = as.factor(resposta) )) +
     
 ```
 
-<br>Ficamos então com 5% dos dados para países acima da média e 5% para países abaixo da média.</br>
+<br>A distribuição ficou com 5% para países acima da média e 5% para países abaixo da média.</br>
 
