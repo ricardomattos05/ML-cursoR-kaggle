@@ -275,7 +275,6 @@ Os tratamentos necessários observados na AED, que foi feita utilizando o pacote
 adult_recipe <- 
   recipe(resposta ~ ., data = adult_train) %>% 
   step_mutate(
-<<<<<<< HEAD
     
     occupation = case_when(
       is.na(occupation) ~ "Farming-fishing",
@@ -315,50 +314,10 @@ adult_recipe <-
 
  # bake(prep(adult_recipe), adult_train)
 
-=======
-    occupation = case_when(
-      is.na(occupation) ~ "Desempregado",
-      TRUE ~ as.character(occupation)),
-    workclass = case_when(
-      is.na(workclass) ~ "Desempregado",
-      TRUE ~ as.character(workclass)),
-    native_country = case_when(
-      native_country == "United-States" ~ "USA",
-      TRUE ~ "other"),
-    capital_total = capital_gain - capital_loss
-    , #or +
-    marital_status = case_when(
-      marital_status == "Married-AF-spouse" | marital_status == "Married-civ-spouse" ~ "Married",
-      TRUE ~ as.character(marital_status))
-    ,
-    education = case_when(education = c("Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", "12th") ~"HS-not-grad",
-                          TRUE ~ as.character(education))
-                          
-    # education = fct_collapse(
-    #   education,
-    #   "HS-not-grad" = c("Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", "12th"),
-    #   Associates = c("Assoc-acdm", "Assoc-voc")
-    # ),
-    # education = fct_relevel(education, "HS-not-grad", "HS-grad", "Some-college", "Associates", "Bachelors", "Masters", "Prof-school", "Doctorate")
-  ) %>% 
-  step_rm(id, capital_gain, capital_loss)%>% 
-  step_string2factor(all_nominal()) %>%
-  # step_log(fnlwgt, age) %>%  
-  step_normalize(all_numeric()) %>% 
-  step_zv(all_predictors()) %>%
-  # step_center(all_numeric()) %>%
-  # step_scale(all_numeric()) %>%
-  step_novel(all_nominal(), -all_outcomes()) %>% 
-  step_dummy(all_nominal(), -all_outcomes())
-
-# bake(prep(adult_recipe), adult_train)
->>>>>>> 3d360557cb506bdc4d8aa687fc53a45f55f2be15
 
 adult_wf <- 
   workflow() %>% 
   add_recipe(adult_recipe)
-
-<<<<<<< HEAD
 ```
 
 
@@ -424,15 +383,3 @@ tree_grid <- grid_max_entropy(hiperparams, size = 10)
 
 ```
 
-
-
-
-
-
-=======
-
-
-
-```
-
->>>>>>> 3d360557cb506bdc4d8aa687fc53a45f55f2be15
