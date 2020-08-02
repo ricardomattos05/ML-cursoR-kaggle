@@ -456,3 +456,425 @@ adult_rf <-
 
 adult_rf
 ```
+
+Workflow para random forest:
+
+```{r}
+
+workflow_adult_rf <- 
+  adult_wf %>% 
+  add_model(adult_rf)
+
+
+```
+
+
+Grid:
+
+```{r}
+set.seed(32)
+
+rf_grid <- parameters(adult_rf) %>% 
+  finalize(bake(prep(adult_recipe), adult_train)) %>% 
+  grid_max_entropy(size = 10)
+
+
+```
+
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+
+library(doParallel)
+library("doFuture")
+
+all_cores <- parallel::detectCores(logical = FALSE) - 1
+registerDoFuture()
+cl <- makeCluster(all_cores)
+plan(future::cluster, workers = cl)
+getDoParWorkers()
+
+set.seed(123)
+rf_tune<- 
+  workflow_adult_rf %>% 
+  tune_grid(
+    resamples = adult_vfold,
+    grid = rf_grid,
+    control = control_grid(save_pred = TRUE, verbose = T, allow_par = T),
+    metrics = metric_set(roc_auc)
+  )
+
+foreach::registerDoSEQ()
+```
+
+```{r}
+autoplot(rf_tune)
+show_best(rf_tune,"roc_auc")
+
+rf_best_hiperparams <- select_best(rf_tune) 
+rf_best_hiperparams #mtry = 42	trees = 1406	 min_n = 21 	Model10 (roc_auc = 0.9115143)
+
+```
+
+Finalizando WF:
+
+```{r}
+workflow_rf_final <- finalize_workflow(
+  workflow_adult_rf,
+  rf_best_hiperparams
+)
+
+workflow_rf_final
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_rf_final %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+
+```
+
+
+Modelo final:
+
+```{r}
+
+rf_final <- last_fit(workflow_rf_final, adult_split)
+collect_metrics(rf_final) #roc_auc = 0.9072885
+
+```
+
+### Xgboost
+
+Tunando mtry, trees e sample size:
+
+```{r}
+adult_xgb <- 
+  boost_tree(
+   mtry = tune(), 
+  trees = tune(), 
+  min_n = tune(), 
+  tree_depth = tune(),
+  # loss_reduction = tune(), 
+  learn_rate = tune(), 
+  # sample_size = tune()
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb
+```
+
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb <- 
+  adult_wf %>% 
+  add_model(adult_xgb)
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+
+xgb_grid <- parameters(adult_xgb) %>%
+    finalize(bake(prep(adult_recipe),adult_train)) %>%
+    grid_max_entropy(size = 20)
+
+xgb_grid
+
+
+```
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+
+all_cores <- parallel::detectCores(logical = FALSE) - 1
+
+registerDoFuture()
+cl <- makeCluster(all_cores)
+plan(future::cluster, workers = cl)
+getDoParWorkers()
+
+# grid search
+ini <- Sys.time()
+xgb_tune <-
+  workflow_adult_xgb %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid,
+        control = control_grid(verbose = TRUE),
+        metrics = metric_set(roc_auc)
+    )
+Sys.time()- ini #Time difference of 39.9844 mins(parallel)
+
+foreach::registerDoSEQ()
+```
+
+
+```{r}
+autoplot(xgb_tune)
+show_best(xgb_tune,"roc_auc")
+
+xgb_best_hiperparams <- select_best(xgb_tune)
+xgb_best_hiperparams #34	1309	5	10	0.010644505	Model13 (roc_auc = 0.9270532)
+
+```
+Finalizando WF:
+
+```{r}
+workflow_xgb_final <- finalize_workflow(
+  workflow_adult_xgb,
+  xgb_best_hiperparams 
+)
+
+workflow_xgb_final
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final <- last_fit(workflow_xgb_final, adult_split)
+collect_metrics(xgb_final)
+
+```
+
+### Xgboost2
+
+Tunando mtry, trees e sample size:
+
+```{r}
+adult_xgb2 <- 
+  boost_tree(
+   mtry = 34, 
+  trees = 1309, 
+  min_n = 5, 
+  tree_depth = 10,
+  loss_reduction = tune(),
+  learn_rate = 0.0106445, 
+  sample_size = tune()
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb2
+
+```
+
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb2 <- 
+  adult_wf %>% 
+  add_model(adult_xgb2)
+```
+
+Grid:
+
+```{r}
+set.seed(32)
+
+xgb_grid2 <- parameters(adult_xgb2) %>%
+    grid_max_entropy(size = 20)
+
+xgb_grid2
+
+
+```
+Efetuando tunagem de hiperparâmetros:
+
+```{r}
+
+all_cores <- parallel::detectCores(logical = FALSE) - 1
+
+registerDoFuture()
+cl <- makeCluster(all_cores)
+plan(future::cluster, workers = cl)
+getDoParWorkers()
+
+# grid search
+ini <- Sys.time()
+xgb_tune2 <-
+  workflow_adult_xgb2 %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid2,
+        control = control_grid(verbose = TRUE),
+        metrics = metric_set(roc_auc)
+    )
+Sys.time()- ini #Time difference of 39.9844 mins(parallel)
+
+foreach::registerDoSEQ()
+```
+
+
+```{r}
+autoplot(xgb_tune2)
+show_best(xgb_tune2,"roc_auc")
+
+xgb2_best_hiperparams <- select_best(xgb_tune2)
+xgb2_best_hiperparams #34	1309	5	10	0.010644505	Model13 (roc_auc = 0.9270532)
+
+```
+Finalizando WF:
+
+```{r}
+workflow_xgb_final2 <- finalize_workflow(
+  workflow_adult_xgb2,
+  xgb2_best_hiperparams 
+)
+
+workflow_xgb_final2
+```
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final2 %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb2_final <- last_fit(workflow_xgb_final2, adult_split)
+collect_metrics(xgb2_final)
+
+```
+
+### Xgboost6
+
+Tunando mtry, trees e sample size:
+
+```{r}
+adult_xgb6 <- 
+  boost_tree(
+    tree_depth = 7, 
+    trees = 1347,
+    learn_rate = 1.566693e-02,
+    mtry = 33,
+    min_n = 5
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+adult_xgb6
+
+```
+
+
+Workflow para Xgboost:
+
+```{r}
+
+workflow_adult_xgb6 <- 
+  adult_wf %>% 
+  add_model(adult_xgb6)
+
+
+```
+
+Finalizando WF:
+
+```{r}
+workflow_xgb_final6 <- finalize_workflow(
+  workflow_adult_xgb6,
+  parameters(adult_xgb6) 
+)
+workflow_xgb_final6
+
+```
+
+
+Verificando importância dos atributos:
+
+```{r}
+workflow_xgb_final6 %>%
+  fit(adult_train) %>%
+  pull_workflow_fit() %>%
+  vip::vip(geom = "col")
+```
+
+Modelo final:
+
+```{r}
+
+xgb_final6 <- last_fit(workflow_xgb_final6, adult_split)
+collect_metrics(xgb_final6)
+
+
+
+```
+
+# Scoragem para submeter resultado
+
+```{r}
+
+adult_val <- readr::read_rds("adult_val.rds")
+
+xgboost_modelo_final <- adult_xgb %>% 
+    finalize_model(xgb_best_hiperparams)
+
+adult_fit <- 
+  fit(xgboost_modelo_final,
+    formula = resposta ~ .,  
+    data = bake(prep(adult_recipe), new_data = adult))
+
+adult_val$more_than_50k <- 
+  predict(adult_fit, 
+          bake(prep(adult_recipe), new_data = adult_val),
+          type = "prob")$`.pred_>50K`
+```
+
+Matriz de confusão:
+
+```{r}
+library("e1071")
+
+adult_val %>% 
+  transmute(resposta = factor(resposta, levels = c(">50K", "<=50K")), 
+            more_than_50k = ifelse(more_than_50k > 0.5, ">50K", "<=50K") %>% 
+              factor(levels = c(">50K", "<=50K"))) %>% 
+  table() %>% 
+  caret::confusionMatrix()
+
+library('pROC')
+plot(roc(adult_val$resposta, adult_val$more_than_50k))
+
+
+adult_val %>% 
+  roc_auc(truth = as.factor(resposta), more_than_50k)
+
+#xgb with new step_mutate: 0.925582
+#xgb2 with new step_mutate: 0.9262863
+#xgb5: 0.9247659
+#xgb5_2 tunnando apenas 5 params: 0.9277751
+#xgb6:  0.9288229
+
+```
+
+
+
+
+
+
+
