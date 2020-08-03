@@ -729,7 +729,7 @@ autoplot(xgb_tune2)
 show_best(xgb_tune2,"roc_auc")
 
 xgb2_best_hiperparams <- select_best(xgb_tune2)
-xgb2_best_hiperparams #34	1309	5	10	0.010644505	Model13 (roc_auc = 0.9270532)
+xgb2_best_hiperparams #2.087647e+00	0.8696967	 (roc_auc = 0.9268947)
 
 ```
 Finalizando WF:
