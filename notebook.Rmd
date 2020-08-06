@@ -55,7 +55,7 @@ skim(adult)
 
 <br> Agora vamos analisar o comportamento das variáveis para definirmos como tratar os nossos dados para o modelo. </br>
 
-## Análise bivariada {.tabset}
+## Parte 1 {.tabset}
 
 ```{r,results='asis', echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -101,7 +101,7 @@ Observações:
 
 * `workclass` : Categorias com baixa representatividade como `Never-worked`e `Without-pay` não possuem classificação com a resposta de interesse ">50k", vamos dar um zoom nessa variável e analisar os NA's que identificamos também.
 
-## AED final: {.tabset}
+## Parte 2 {.tabset}
 
 ### occupation
 
@@ -252,7 +252,7 @@ Com nossa a análise exploratória concluída, vamos dar início as estapas da m
 
 ## Amostragem
 
-Fazendo a separação dos dados em treino e teste para a modelagem.
+Fazendo a separação dos dados em treino e teste, estratificando pela variável resposta para a modelagem.
 
 ```{r, echo=TRUE, message=FALSE, warning=FALSE}
 set.seed(32)
@@ -386,14 +386,14 @@ tree_grid <- grid_max_entropy(hiperparams, size = 10)
 
 Efetuando tunagem de hiperparâmetros:
 
-```{r, echo= TRUE}
+```{r, echo= TRUE, results="hide",include=FALSE}
 
 tree_tune <- 
   workflow_adult_tree %>% 
   tune_grid(
     resamples = adult_vfold,
     grid = tree_grid,
-    control = control_grid(save_pred = TRUE, verbose = T, allow_par = F),
+    control = control_grid(save_pred = TRUE, verbose = FALSE, allow_par = F),
     metrics = metric_set(roc_auc)
   )
 
@@ -478,7 +478,7 @@ rf_grid <- parameters(adult_rf) %>%
   finalize(bake(prep(adult_recipe), adult_train)) %>% 
   grid_max_entropy(size = 10)
 
-
+rf_grid
 ```
 
 Efetuando tunagem de hiperparâmetros:
@@ -500,7 +500,7 @@ rf_tune<-
   tune_grid(
     resamples = adult_vfold,
     grid = rf_grid,
-    control = control_grid(save_pred = TRUE, verbose = T, allow_par = T),
+    control = control_grid(save_pred = TRUE, verbose = FALSE, allow_par = T),
     metrics = metric_set(roc_auc)
   )
 
@@ -512,7 +512,7 @@ autoplot(rf_tune)
 show_best(rf_tune,"roc_auc")
 
 rf_best_hiperparams <- select_best(rf_tune) 
-rf_best_hiperparams #mtry = 42	trees = 1406	 min_n = 21 	Model10 (roc_auc = 0.9115143)
+rf_best_hiperparams 
 
 ```
 
@@ -549,7 +549,7 @@ collect_metrics(rf_final) #roc_auc = 0.9072885
 
 ### Xgboost
 
-Tunando mtry, trees e sample size:
+Como o Xgboost possui muitos parâmetros, optei pora não tunnar os parâmetros `loss_reduction` e `samples_size` nesse primeiro momento. Sendo assim os valores default da enginee `xgboost` são atribuídos à esses parâmetros, loss_reduction = 0 e sample_size = 1.
 
 ```{r}
 adult_xgb <- 
@@ -575,6 +575,8 @@ Workflow para Xgboost:
 workflow_adult_xgb <- 
   adult_wf %>% 
   add_model(adult_xgb)
+
+workflow_adult_xgb
 ```
 
 Grid:
@@ -590,10 +592,11 @@ xgb_grid
 
 
 ```
-Efetuando tunagem de hiperparâmetros:
+
+<br>Efetuando tunagem de hiperparâmetros:</br>
 
 ```{r}
-
+library(doFuture)
 all_cores <- parallel::detectCores(logical = FALSE) - 1
 
 registerDoFuture()
@@ -608,7 +611,7 @@ xgb_tune <-
     tune_grid(
         resamples = adult_vfold,
         grid = xgb_grid,
-        control = control_grid(verbose = TRUE),
+        control = control_grid(verbose = FALSE),
         metrics = metric_set(roc_auc)
     )
 Sys.time()- ini #Time difference of 39.9844 mins(parallel)
@@ -622,7 +625,7 @@ autoplot(xgb_tune)
 show_best(xgb_tune,"roc_auc")
 
 xgb_best_hiperparams <- select_best(xgb_tune)
-xgb_best_hiperparams #34	1309	5	10	0.010644505	Model13 (roc_auc = 0.9270532)
+xgb_best_hiperparams 
 
 ```
 Finalizando WF:
@@ -656,7 +659,7 @@ collect_metrics(xgb_final)
 
 ### Xgboost2
 
-Tunando mtry, trees e sample size:
+Agora vamos inserir os valores identificados na tunagem para os parâmetros e efetuar o tuning para os parâmetros que `sample_size` e `loss_reduction`:
 
 ```{r}
 adult_xgb2 <- 
@@ -697,6 +700,7 @@ xgb_grid2
 
 
 ```
+
 Efetuando tunagem de hiperparâmetros:
 
 ```{r}
@@ -715,10 +719,10 @@ xgb_tune2 <-
     tune_grid(
         resamples = adult_vfold,
         grid = xgb_grid2,
-        control = control_grid(verbose = TRUE),
+        control = control_grid(verbose = FALSE),
         metrics = metric_set(roc_auc)
     )
-Sys.time()- ini #Time difference of 39.9844 mins(parallel)
+Sys.time()- ini
 
 foreach::registerDoSEQ()
 ```
@@ -729,7 +733,7 @@ autoplot(xgb_tune2)
 show_best(xgb_tune2,"roc_auc")
 
 xgb2_best_hiperparams <- select_best(xgb_tune2)
-xgb2_best_hiperparams #2.087647e+00	0.8696967	 (roc_auc = 0.9268947)
+xgb2_best_hiperparams 
 
 ```
 Finalizando WF:
@@ -761,71 +765,50 @@ collect_metrics(xgb2_final)
 
 ```
 
-### Xgboost6
-
-Tunando mtry, trees e sample size:
+#Comparando os modelos
 
 ```{r}
-adult_xgb6 <- 
-  boost_tree(
-    tree_depth = 7, 
-    trees = 1347,
-    learn_rate = 1.566693e-02,
-    mtry = 33,
-    min_n = 5
-  ) %>%
-  set_mode("classification") %>%
-  set_engine("xgboost")
+bind_rows(
+ tree_final %>%
+  collect_predictions() %>% 
+  mutate(id = "Decision tree")
+  ,
+ rf_final %>%
+  collect_predictions() %>% 
+  mutate(id = "Random Forest")
+ ,
+  xgb_final %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost")
+  ,
+  xgb2_final %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost2")
+) %>% 
+  group_by(id) %>% 
+  nest() %>% 
+  ungroup() %>% 
+  mutate(roc = map(data, ~roc_curve(.x, truth = resposta, `.pred_>50K`)),
+         auc = map_dbl(data, ~roc_auc(.x, truth = resposta, `.pred_>50K`) %>% 
+                         pull(.estimate) %>% round(4)),
+         id = paste0(id, " auc: ", auc)) %>% 
+  select(-data) %>% 
+  unnest(cols = c(roc)) %>% 
+  ggplot() +
+  aes(x = 1 - specificity, y = sensitivity, color = id) +
+  geom_path() +
+  geom_abline(lty = 3) +
+  ggtitle("Curva Roc")
 
-adult_xgb6
 
 ```
 
-
-Workflow para Xgboost:
-
-```{r}
-
-workflow_adult_xgb6 <- 
-  adult_wf %>% 
-  add_model(adult_xgb6)
-
-
-```
-
-Finalizando WF:
-
-```{r}
-workflow_xgb_final6 <- finalize_workflow(
-  workflow_adult_xgb6,
-  parameters(adult_xgb6) 
-)
-workflow_xgb_final6
-
-```
-
-
-Verificando importância dos atributos:
-
-```{r}
-workflow_xgb_final6 %>%
-  fit(adult_train) %>%
-  pull_workflow_fit() %>%
-  vip::vip(geom = "col")
-```
-
-Modelo final:
-
-```{r}
-
-xgb_final6 <- last_fit(workflow_xgb_final6, adult_split)
-collect_metrics(xgb_final6)
-
-
-
-```
+Podemos ver a partir da curva roc que o xgboost obteve melhor perfomance que o random forest e a árvore de decisão. 
+Interessante que o xgboost sem tunar os hiperparâmetros `loss_reduction` e `sample_size` se saiu discretamente melhor que o xgboost2 onde efetuamos o tuning desses dois hiperparâmetros. Sendo assim nosso modelo final será o **xgb_final**.
 
 # Scoragem para submeter resultado
+
+Vamos então finalizar nosso modelo campeão e scorar a base de validação para efetuar a submissão:
 
 ```{r}
 
@@ -857,22 +840,16 @@ adult_val %>%
   table() %>% 
   caret::confusionMatrix()
 
-library('pROC')
-plot(roc(adult_val$resposta, adult_val$more_than_50k))
-
-
-adult_val %>% 
-  roc_auc(truth = as.factor(resposta), more_than_50k)
-
-#xgb with new step_mutate: 0.925582
-#xgb2 with new step_mutate: 0.9262863
-#xgb5: 0.9247659
-#xgb5_2 tunnando apenas 5 params: 0.9277751
-#xgb6:  0.9288229
 
 ```
 
 
+Selecionando campos no formato da submissão:
+
+```{r}
+submissao <- adult_val %>% select(id, more_than_50k)
+readr::write_csv(submissao, "submissao.csv")
+```
 
 
 
