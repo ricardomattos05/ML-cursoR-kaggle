@@ -392,6 +392,7 @@ Efetuando tunagem de hiperparâmetros:
 
 ```{r, echo= TRUE, results="hide",include=FALSE}
 
+<<<<<<< HEAD
 # tree_tune <- 
 #   workflow_adult_tree %>% 
 #   tune_grid(
@@ -400,6 +401,16 @@ Efetuando tunagem de hiperparâmetros:
 #     control = control_grid(save_pred = TRUE, verbose = FALSE, allow_par = F),
 #     metrics = metric_set(roc_auc)
 #   )
+=======
+tree_tune <- 
+  workflow_adult_tree %>% 
+  tune_grid(
+    resamples = adult_vfold,
+    grid = tree_grid,
+    control = control_grid(save_pred = TRUE, verbose = FALSE, allow_par = F),
+    metrics = metric_set(roc_auc)
+  )
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 
 ```
 
@@ -479,6 +490,7 @@ workflow_adult_rf <-
 Grid:
 
 ```{r}
+<<<<<<< HEAD
 # set.seed(32)
 # 
 # rf_grid <- parameters(adult_rf) %>% 
@@ -486,12 +498,22 @@ Grid:
 #   grid_max_entropy(size = 10)
 # 
 # rf_grid
+=======
+set.seed(32)
+
+rf_grid <- parameters(adult_rf) %>% 
+  finalize(bake(prep(adult_recipe), adult_train)) %>% 
+  grid_max_entropy(size = 10)
+
+rf_grid
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 ```
 
 Efetuando tunagem de hiperparâmetros:
 
 ```{r}
 
+<<<<<<< HEAD
 # library(doParallel)
 # library("doFuture")
 # 
@@ -510,15 +532,43 @@ Efetuando tunagem de hiperparâmetros:
 #     control = control_grid(save_pred = TRUE, verbose = FALSE, allow_par = T),
 #     metrics = metric_set(roc_auc)
 #   )
+=======
+library(doParallel)
+library("doFuture")
+
+all_cores <- parallel::detectCores(logical = FALSE) - 1
+registerDoFuture()
+cl <- makeCluster(all_cores)
+plan(future::cluster, workers = cl)
+getDoParWorkers()
+
+set.seed(123)
+rf_tune<- 
+  workflow_adult_rf %>% 
+  tune_grid(
+    resamples = adult_vfold,
+    grid = rf_grid,
+    control = control_grid(save_pred = TRUE, verbose = FALSE, allow_par = T),
+    metrics = metric_set(roc_auc)
+  )
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 
 ```
 
 ```{r}
+<<<<<<< HEAD
 # autoplot(rf_tune)
 # show_best(rf_tune,"roc_auc")
 # 
 # rf_best_hiperparams <- select_best(rf_tune) 
 # rf_best_hiperparams 
+=======
+autoplot(rf_tune)
+show_best(rf_tune,"roc_auc")
+
+rf_best_hiperparams <- select_best(rf_tune) 
+rf_best_hiperparams 
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 
 ##    mtry trees min_n .config
 ##   <int> <int> <int> <chr>  
@@ -606,9 +656,19 @@ Grid:
 
 
 ```
+<<<<<<< HEAD
+=======
 
 <br>Efetuando tunagem de hiperparâmetros:</br>
 
+```{r}
+library(doFuture)
+all_cores <- parallel::detectCores(logical = FALSE) - 1
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
+
+<br>Efetuando tunagem de hiperparâmetros:</br>
+
+<<<<<<< HEAD
 ```{r}
 # library(doFuture)
 # all_cores <- parallel::detectCores(logical = FALSE) - 1
@@ -631,6 +691,21 @@ Grid:
 # Sys.time()- ini #Time difference of 39.9844 mins(parallel)
 # 
 # foreach::registerDoSEQ()
+=======
+# grid search
+ini <- Sys.time()
+xgb_tune <-
+  workflow_adult_xgb %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid,
+        control = control_grid(verbose = FALSE),
+        metrics = metric_set(roc_auc)
+    )
+Sys.time()- ini #Time difference of 39.9844 mins(parallel)
+
+foreach::registerDoSEQ()
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 ```
 
 
@@ -641,9 +716,14 @@ Grid:
 # xgb_best_hiperparams <- select_best(xgb_tune)
 # xgb_best_hiperparams 
 
+<<<<<<< HEAD
 ##    mtry trees min_n tree_depth learn_rate .config
 ##   <int> <int> <int>      <int>      <dbl> <chr>  
 ## 1    34  1309     5         10     0.0106 Model13
+=======
+xgb_best_hiperparams <- select_best(xgb_tune)
+xgb_best_hiperparams 
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 
 ```
 Finalizando WF:
@@ -730,6 +810,7 @@ Efetuando tunagem de hiperparâmetros:
 
 ```{r}
 
+<<<<<<< HEAD
 # all_cores <- parallel::detectCores(logical = FALSE) - 1
 # 
 # registerDoFuture()
@@ -750,15 +831,45 @@ Efetuando tunagem de hiperparâmetros:
 # Sys.time()- ini
 # 
 # foreach::registerDoSEQ()
+=======
+all_cores <- parallel::detectCores(logical = FALSE) - 1
+
+registerDoFuture()
+cl <- makeCluster(all_cores)
+plan(future::cluster, workers = cl)
+getDoParWorkers()
+
+# grid search
+ini <- Sys.time()
+xgb_tune2 <-
+  workflow_adult_xgb2 %>%
+    tune_grid(
+        resamples = adult_vfold,
+        grid = xgb_grid2,
+        control = control_grid(verbose = FALSE),
+        metrics = metric_set(roc_auc)
+    )
+Sys.time()- ini
+
+foreach::registerDoSEQ()
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 ```
 
 
 ```{r}
+<<<<<<< HEAD
 # autoplot(xgb_tune2)
 # show_best(xgb_tune2,"roc_auc")
 # 
 # xgb2_best_hiperparams <- select_best(xgb_tune2)
 # xgb2_best_hiperparams 
+=======
+autoplot(xgb_tune2)
+show_best(xgb_tune2,"roc_auc")
+
+xgb2_best_hiperparams <- select_best(xgb_tune2)
+xgb2_best_hiperparams 
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 
 ```
 Finalizando WF:
@@ -781,7 +892,10 @@ workflow_xgb_final2 %>%
   fit(adult_train) %>%
   pull_workflow_fit() %>%
   vip::vip(geom = "col")
+<<<<<<< HEAD
 
+=======
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 ```
 
 Modelo final:
@@ -789,11 +903,19 @@ Modelo final:
 ```{r}
 
 xgb2_final <- last_fit(workflow_xgb_final2, adult_split)
+<<<<<<< HEAD
 collect_metrics(xgb2_final) #0.9243285
 
 ```
 
 # Comparando os modelos
+=======
+collect_metrics(xgb2_final)
+
+```
+
+#Comparando os modelos
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 
 ```{r}
 bind_rows(
@@ -802,6 +924,7 @@ bind_rows(
   mutate(id = "Decision tree")
   ,
  rf_final %>%
+<<<<<<< HEAD
   collect_predictions() %>%
   mutate(id = "Random Forest")
  ,
@@ -811,14 +934,31 @@ bind_rows(
   ,
   xgb2_final %>%
   collect_predictions() %>%
+=======
+  collect_predictions() %>% 
+  mutate(id = "Random Forest")
+ ,
+  xgb_final %>%
+  collect_predictions() %>% 
+  mutate(id = "xgboost")
+  ,
+  xgb2_final %>%
+  collect_predictions() %>% 
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
   mutate(id = "xgboost2")
 ) %>% 
   group_by(id) %>% 
   nest() %>% 
   ungroup() %>% 
+<<<<<<< HEAD
   mutate(roc = map(data, ~roc_curve(.x, truth = resposta, `.pred_<=50K`)),
          auc = map_dbl(data, ~roc_auc(.x, truth = resposta, `.pred_<=50K`) %>% 
                          pull(.estimate) %>% round(3)),
+=======
+  mutate(roc = map(data, ~roc_curve(.x, truth = resposta, `.pred_>50K`)),
+         auc = map_dbl(data, ~roc_auc(.x, truth = resposta, `.pred_>50K`) %>% 
+                         pull(.estimate) %>% round(4)),
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
          id = paste0(id, " auc: ", auc)) %>% 
   select(-data) %>% 
   unnest(cols = c(roc)) %>% 
@@ -875,7 +1015,11 @@ Selecionando campos no formato da submissão:
 
 ```{r}
 submissao <- adult_val %>% select(id, more_than_50k)
+<<<<<<< HEAD
 write_csv(submissao, "submissao.csv")
+=======
+readr::write_csv(submissao, "submissao.csv")
+>>>>>>> 10f847a0386649c40920033653bc6bfef750f6f8
 ```
 
 
